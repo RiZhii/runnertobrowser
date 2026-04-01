@@ -11,10 +11,10 @@ if (!PLAN_FILE) {
 }
 
 // 🔥 RETRY LOGIC (CRITICAL)
-async function getDebuggerUrl(retries = 15) {
+async function getDebuggerUrl(retries = 30) {
   for (let i = 0; i < retries; i++) {
     try {
-      const res = await axios.get("http://browser-box:9222/json");
+      const res = await axios.get("http://browser-box:9223/json");
 
       if (res.data.length > 0) {
         console.log("CDP endpoint ready");
@@ -23,7 +23,7 @@ async function getDebuggerUrl(retries = 15) {
     } catch (e) {}
 
     console.log(`Waiting for browser... (${i+1})`);
-    await new Promise(r => setTimeout(r, 1000));
+    await new Promise(r => setTimeout(r, 2000));
   }
 
   throw new Error("Browser not ready");
@@ -39,7 +39,8 @@ async function run() {
 
   // 🔥 Replace hostname
   wsurl = wsurl.replace("127.0.0.1", "browser-box")
-               .replace("localhost", "browser-box");
+               .replace("localhost", "browser-box")
+               .replace("9222", "9223");
 
   // ✅ CONNECT
   const browser = await chromium.connectOverCDP(wsurl);

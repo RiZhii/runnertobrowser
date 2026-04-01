@@ -12,8 +12,7 @@ services:
       - "8554:8554"
       - "8889:8889"
       - "9222:9222"
-    networks:
-      - app-network
+      - "9223:9223"
 
   runner:
     build:
@@ -22,9 +21,3 @@ services:
     container_name: runner
     depends_on:
       - browser-box
-    networks:
-      - app-network
-
-networks:
-  app-network:
-    driver: bridge
