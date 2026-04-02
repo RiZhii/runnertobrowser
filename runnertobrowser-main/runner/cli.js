@@ -80,7 +80,7 @@ async function run() {
     timeout: 30000
   });
 
-  console.log("🌐 Navigation complete");
+  console.log("Navigation complete");
 
   // -----------------------------
   // Execute Steps

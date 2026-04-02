@@ -12,7 +12,7 @@ dbus-daemon --system --fork 2>/dev/null || true
 # -------------------------------
 # Virtual Display
 # -------------------------------
-echo "🖥️ Starting Xvfb..."
+echo "Starting Xvfb..."
 Xvfb :99 -screen 0 1280x720x24 &
 export DISPLAY=:99
 sleep 2
@@ -55,7 +55,7 @@ google-chrome \
   --remote-debugging-address=0.0.0.0 \
   --user-data-dir=/tmp/chrome \
   --window-size=1280,720 \
-  about:blank \
+  "https://odoo.com \
   > /tmp/chrome.log 2>&1 &
 
 CHROME_PID=$!
@@ -63,7 +63,7 @@ CHROME_PID=$!
 # -------------------------------
 # Wait for CDP
 # -------------------------------
-echo "⏳ Waiting for Chrome CDP..."
+echo "Waiting for Chrome CDP..."
 
 MAX_RETRIES=30
 RETRY_DELAY=2
