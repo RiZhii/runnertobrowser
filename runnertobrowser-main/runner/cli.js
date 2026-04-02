@@ -10,7 +10,9 @@ if (!PLAN_FILE) {
   process.exit(1);
 }
 
-// ✅ STRONG RETRY + VALIDATION
+// -----------------------------
+// Wait for CDP endpoint
+// -----------------------------
 async function getDebuggerUrl(retries = 30) {
   for (let i = 0; i < retries; i++) {
     try {
@@ -20,75 +22,71 @@ async function getDebuggerUrl(retries = 30) {
         const ws = res.data[0].webSocketDebuggerUrl;
 
         if (ws) {
-          console.log(`✅ CDP endpoint ready (${res.data.length} targets)`);
+          console.log(`CDP ready (${res.data.length} targets)`);
           return ws;
         }
       }
     } catch (e) {}
 
-    console.log(`⏳ Waiting for browser... (${i + 1}/${retries})`);
+    console.log(`Waiting for browser... (${i + 1}/${retries})`);
     await new Promise(r => setTimeout(r, 2000));
   }
 
-  throw new Error("Browser not ready (CDP empty)");
+  throw new Error("Browser CDP not ready");
 }
 
+// -----------------------------
+// MAIN RUN
+// -----------------------------
 async function run() {
-  console.log("\n🚀 ENTERPRISE RUNNER STARTED\n");
+  console.log("\n🚀 RUNNER STARTED\n");
 
   const plan = loadPlan(PLAN_FILE);
 
-  // ✅ GET WS URL
+  // -----------------------------
+  // Get WS URL
+  // -----------------------------
   let wsurl = await getDebuggerUrl();
 
-  console.log("original WS URL:", wsurl);
+  console.log("Original WS:", wsurl);
 
   const urlObj = new URL(wsurl);
-
-  // 🔥 IMPORTANT: route via proxy
   urlObj.hostname = "browser-box";
   urlObj.port = "3000";
 
   wsurl = urlObj.toString();
 
-  console.log("Final WS URL:", wsurl);
+  console.log("Proxy WS:", wsurl);
 
-  // ✅ CONNECT
+  // -----------------------------
+  // Connect to browser
+  // -----------------------------
   const browser = await chromium.connectOverCDP(wsurl);
-  console.log("✅ browser connected");
+  console.log("Browser connected");
 
-  // 🔥 CRITICAL FIX STARTS HERE
+  // -----------------------------
+  // ALWAYS CREATE FRESH CONTEXT + PAGE
+  // -----------------------------
+  const context = await browser.newContext();
+  const page = await context.newPage();
 
-  let context;
+  console.log("Fresh page created");
 
-  if (browser.contexts().length === 0) {
-    console.log("⚠️ No context found — creating new one");
-    context = await browser.newContext();
-  } else {
-    context = browser.contexts()[0];
-  }
-
-  let page;
-
-  if (context.pages().length === 0) {
-    console.log("⚠️ No page found — creating new page");
-    page = await context.newPage();   // ⭐ FIX
-  } else {
-    page = context.pages()[0];
-  }
-
-  console.log("✅ page ready");
-
-  // ✅ ALWAYS control navigation from runner
-  await page.goto("https://www.odoo.com/", {
+  // -----------------------------
+  // Navigate (runner owns this)
+  // -----------------------------
+  await page.goto(plan.meta?.start_url || "https://www.odoo.com/", {
     waitUntil: "domcontentloaded",
     timeout: 30000
   });
 
-  console.log("🌐 navigated to Odoo");
+  console.log("🌐 Navigation complete");
 
-  // ===== EXECUTION =====
-  let passed = 0, failed = 0;
+  // -----------------------------
+  // Execute Steps
+  // -----------------------------
+  let passed = 0;
+  let failed = 0;
 
   for (let i = 0; i < plan.steps.length; i++) {
     const step = plan.steps[i];
@@ -113,7 +111,9 @@ async function run() {
   await browser.close();
 }
 
-// -------- ARG PARSER --------
+// -----------------------------
+// ARG PARSER
+// -----------------------------
 function parseArgs(argv) {
   const out = {};
   for (let i = 0; i < argv.length; i++) {
@@ -127,7 +127,9 @@ function parseArgs(argv) {
   return out;
 }
 
-// -------- RUN --------
+// -----------------------------
+// START
+// -----------------------------
 run().catch(err => {
   console.error("Fatal:", err.message);
   process.exit(1);

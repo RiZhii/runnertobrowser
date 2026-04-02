@@ -1,39 +1,47 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Starting Browser Container..."
+echo "Starting Browser Container..."
 
-# DBus (needed for Chrome)
+# -------------------------------
+# DBus (required for Chrome)
+# -------------------------------
 mkdir -p /run/dbus
 dbus-daemon --system --fork 2>/dev/null || true
 
-# OPTIONAL: streaming (RTSP/WebRTC)
-/usr/local/bin/mediamtx /etc/mediamtx.yml &
-
-# Virtual display
+# -------------------------------
+# Virtual Display
+# -------------------------------
+echo "🖥️ Starting Xvfb..."
 Xvfb :99 -screen 0 1280x720x24 &
 export DISPLAY=:99
-sleep 1
+sleep 2
 
-# Window manager
+# -------------------------------
+# Window Manager
+# -------------------------------
+echo "Starting Fluxbox..."
 fluxbox &
 
-# VNC server
+# -------------------------------
+# VNC Server
+# -------------------------------
+echo "Starting VNC..."
 x11vnc -display :99 -rfbport 5900 -nopw -forever -shared -listen 0.0.0.0 &
 
-# noVNC (web UI)
+# -------------------------------
+# noVNC
+# -------------------------------
+echo "Starting noVNC..."
 /opt/novnc/utils/novnc_proxy --vnc localhost:5900 --listen 6080 &
 
-sleep 5
+sleep 3
 
-# OPTIONAL: ffmpeg stream
-ffmpeg -nostdin -f x11grab -video_size 1280x720 -framerate 30 -i :99 \
-       -c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p \
-       -f rtsp rtsp://localhost:8554/mystream &
+# -------------------------------
+# Launch Chrome (CDP enabled)
+# -------------------------------
+echo "Launching Chrome..."
 
-echo "🌐 Launching Chrome..."
-
-# 🔥 IMPORTANT: open a page (ensures /json is not empty)
 google-chrome \
   --no-sandbox \
   --disable-dev-shm-usage \
@@ -45,8 +53,6 @@ google-chrome \
   --disable-session-crashed-bubble \
   --remote-debugging-port=9222 \
   --remote-debugging-address=0.0.0.0 \
-  --remote-debugging-host=0.0.0.0 \
-  --remote-allow-origin=* \
   --user-data-dir=/tmp/chrome \
   --window-size=1280,720 \
   about:blank \
@@ -54,50 +60,66 @@ google-chrome \
 
 CHROME_PID=$!
 
-# 🔥 REAL readiness check
+# -------------------------------
+# Wait for CDP
+# -------------------------------
 echo "⏳ Waiting for Chrome CDP..."
 
-# Give Chrome some time to boot
-sleep 5
-
-MAX_RETRIES=20
+MAX_RETRIES=30
 RETRY_DELAY=2
 
 for i in $(seq 1 $MAX_RETRIES); do
-  JSON=$(curl -s http://localhost:9222/json || true)
-
-  # ✅ Check if ANY target exists (not just websocket)
-  COUNT=$(echo "$JSON" | grep -o "webSocketDebuggerUrl" | wc -l)
-
-  if [ "$COUNT" -gt 0 ]; then
-    echo "✅ Chrome CDP ready with $COUNT target(s)"
+  if curl -s http://localhost:9222/json > /dev/null 2>&1; then
+    echo "CDP endpoint reachable"
     break
   fi
 
-  echo "⏳ waiting... ($i/$MAX_RETRIES)"
+  echo "waiting for CDP... ($i/$MAX_RETRIES)"
   sleep $RETRY_DELAY
 done
 
-# 🔥 FINAL VALIDATION
-FINAL_COUNT=$(curl -s http://localhost:9222/json | grep -o "webSocketDebuggerUrl" | wc -l)
+# -------------------------------
+# Ensure at least one target
+# -------------------------------
+echo "Creating CDP page..."
 
-if [ "$FINAL_COUNT" -eq 0 ]; then
-  echo "❌ Chrome CDP not ready — no debuggable targets"
+curl -s "http://localhost:9222/json/new?about:blank" > /dev/null || true
+
+sleep 2
+
+TARGET_COUNT=$(curl -s http://localhost:9222/json | grep -o "webSocketDebuggerUrl" | wc -l)
+
+if [ "$TARGET_COUNT" -eq 0 ]; then
+  echo "No CDP targets available"
   exit 1
 fi
 
-echo "🚀 Chrome fully ready with $FINAL_COUNT target(s)"
+echo "Chrome ready with $TARGET_COUNT target(s)"
 
-echo "chrome fully ready"
+echo "Targets:"
+curl -s http://localhost:9222/json | grep url || true
 
-echo "starting proxy...."
+# -------------------------------
+# Start Proxy
+# -------------------------------
+echo "Starting proxy..."
 
 cd /app
 node proxy.js &
 
 sleep 2
-ps aux | grep node
 
-echo "browser container is stable"
+if ! ps aux | grep -v grep | grep -q "node proxy.js"; then
+  echo "Proxy failed to start"
+  exit 1
+fi
 
+echo "Proxy running"
+
+# -------------------------------
+# Container Ready
+# -------------------------------
+echo "Browser container is READY"
+
+# Keep container alive
 tail -f /dev/null
