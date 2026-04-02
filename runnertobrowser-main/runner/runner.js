@@ -652,3 +652,93 @@ function loadPlan(jsonPath) {
 }
 
 module.exports = { executeStep, resolveLocator, loadPlan };
+
+// =======================
+// EXECUTION ENTRY POINT
+// =======================
+
+const { chromium } = require('playwright');
+const axios = require('axios');
+
+async function getDebuggerUrl(retries = 30) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const res = await axios.get("http://browser-box:3000/json");
+
+      if (res.data && res.data.length > 0) {
+        console.log("CDP ready");
+        return res.data[0].webSocketDebuggerUrl;
+      }
+    } catch (e) {}
+
+    console.log(`Waiting for browser... (${i + 1}/${retries})`);
+    await new Promise(r => setTimeout(r, 2000));
+  }
+
+  throw new Error("Browser CDP not ready");
+}
+
+(async () => {
+  console.log("Runner started");
+
+  // Load test plan
+  const plan = loadPlan('./test-plan.json');
+
+  // Get WS URL from proxy
+  let wsurl = await getDebuggerUrl();
+
+  // IMPORTANT: route through docker network
+  const urlObj = new URL(wsurl);
+  urlObj.hostname = "browser-box";
+  urlObj.port = "3000";
+  wsurl = urlObj.toString();
+
+  console.log("WS URL:", wsurl);
+
+  // Connect to browser container
+  const browser = await chromium.connectOverCDP(wsurl);
+  console.log("Browser connected");
+
+  // ALWAYS CREATE NEW PAGE (CRITICAL)
+  const context = await browser.newContext();
+  const page = await context.newPage();
+
+  console.log("New page created");
+
+  // Start URL
+  if (plan.meta.start_url) {
+    await page.goto(plan.meta.start_url, {
+      waitUntil: "networkidle",
+      timeout: 30000
+    });
+  }
+
+  console.log("Navigation done");
+
+  // EXECUTE STEPS
+  let passed = 0;
+  let failed = 0;
+
+  for (let i = 0; i < plan.steps.length; i++) {
+    const step = plan.steps[i];
+
+    try {
+      await executeStep(page, step, {
+        verbose: true,
+        _allSteps: plan.steps,
+        _stepIndex: i,
+        _prevStep: plan.steps[i - 1],
+        index: i + 1
+      });
+
+      passed++;
+    } catch (err) {
+      failed++;
+      console.error(`Step ${i + 1} failed:`, err.message);
+    }
+  }
+
+  console.log(`\nTotal: ${plan.steps.length} | Passed: ${passed} | Failed: ${failed}`);
+
+  await browser.close();
+})();
