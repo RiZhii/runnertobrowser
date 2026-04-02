@@ -1,0 +1,8 @@
+logLevel: info
+
+rtspAddress: :8554
+apiAddress: :8889
+webrtcAddress: :8889
+
+paths:
+  mystream: {}

@@ -1,0 +1,14 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+RUN apk add --no-cache curl
+
+COPY package.json ./
+RUN npm install
+
+COPY cli.js .
+COPY runner.js .
+COPY test-plan.json .
+
+CMD ["node", "cli.js", "--plan", "test-plan.json"]
