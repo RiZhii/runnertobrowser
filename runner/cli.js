@@ -10,11 +10,11 @@ if (!PLAN_FILE) {
   process.exit(1);
 }
 
-// 🔥 RETRY LOGIC (CRITICAL)
+// RETRY LOGIC (CRITICAL)
 async function getDebuggerUrl(retries = 30) {
   for (let i = 0; i < retries; i++) {
     try {
-      const res = await axios.get("http://browser-box:9223/json");
+      const res = await axios.get("http://browser-box:3000/json");
 
       if (res.data.length > 0) {
         console.log("CDP endpoint ready");
@@ -37,29 +37,39 @@ async function run() {
   // ✅ GET WS URL
   let wsurl = await getDebuggerUrl();
 
-  // 🔥 Replace hostname
-  wsurl = wsurl.replace("127.0.0.1", "browser-box")
-               .replace("localhost", "browser-box")
-               .replace("9222", "9223");
+  console.log("original WS URL:", wsurl);
 
-  // ✅ CONNECT
+  const urlObj = new URL(wsurl);
+  
+  urlObj.hostname = "browser-box";
+  urlObj.port = "3000";
+
+  wsurl = urlObj.toString();
+
+  console.log("Final WS URL:", wsurl);
+
   const browser = await chromium.connectOverCDP(wsurl);
 
+  console.log("browser connected");
+
   // ✅ ALWAYS CREATE CONTEXT
-  let context;
   const contexts = browser.contexts();
 
-  if (contexts.length > 0) {
-    context = contexts[0];
-  } else {
-    console.log("Creating new context");
-    context = await browser.newContext();
+  if (contexts.length === 0) {
+    throw new Error("No context found");
   }
 
-  // ✅ ALWAYS NEW PAGE
-  const page = await context.newPage();
+  const pages = contexts[0].pages();
 
-  console.log("✅ Browser connected");
+  if (pages.length === 0) {
+    throw new Error("No page found in browser");
+  }
+
+  const page = pages[0];
+
+  console.log("page created");
+
+  await page.goto("https://www.odoo.com/");
 
   // ===== EXECUTION =====
   let passed = 0, failed = 0;
@@ -79,11 +89,11 @@ async function run() {
       passed++;
     } catch (err) {
       failed++;
-      console.error("❌ Step failed:", err.message);
+      console.error("Step failed:", err.message);
     }
   }
 
-  console.log(`\n📊 Total: ${plan.steps.length} | Passed: ${passed} | Failed: ${failed}`);
+  console.log(`\nTotal: ${plan.steps.length} | Passed: ${passed} | Failed: ${failed}`);
 
   await browser.close();
 }
@@ -102,6 +112,6 @@ function parseArgs(argv) {
 }
 
 run().catch(err => {
-  console.error("🔥 Fatal:", err.message);
+  console.error("Fatal:", err.message);
   process.exit(1);
 });

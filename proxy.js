@@ -17,18 +17,20 @@ proxy.on('error', (err,req,res) => {
     res.end('Proxy error');
 });
 
-const server = http.createServer((rea, res) => {
+const server = http.createServer((req, res) => {
+    console.log("HTTP request:", req.url);
     proxy.web(req, res);
 });
 
-server.on('upgrade', (teq, socket, head) => {
+server.on('upgrade', (req, socket, head) => {
+    console.log("ws upgrade");
     proxy.ws(req, socket, head);
 });
 
 const PORT = 3000;
 
 server.listen(PORT, () => {
-    console.log('Proxy run on ${PORT}');
+    console.log(`Proxy run on ${PORT}`);
 });
 
 //

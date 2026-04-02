@@ -9,11 +9,10 @@ RUN apt-get update && apt-get install -y \
     nodejs npm \
     xvfb x11vnc novnc websockify fluxbox git \
     dbus-x11 dbus fonts-liberation libnss3 \
-    curl wget gnupg  \
+    curl wget gnupg grep ffmpeg \
     && rm -rf /var/lib/apt/lists/*
-
+    
 COPY package.json .
-
 RUN npm install
 
 RUN wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google.gpg \

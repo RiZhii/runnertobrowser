@@ -49,32 +49,42 @@ google-chrome \
   --remote-allow-origin=* \
   --user-data-dir=/tmp/chrome \
   --window-size=1280,720 \
-  "https://www.google.com" &
+  "https://www.odoo.com" \
+  > /tmp/chrome.log 2>&1 &
+
+CHROME_PID=$!
 
 echo "⏳ Waiting for Chrome CDP..."
 
 # 🔥 REAL readiness check
 sleep 5 
-for i in {1..10}; do
-  if curl -s "http://localhost:9222/json >/dev/null"; then
-    echo "chrome is responding"
+for i in $(seq 1 20); do
+  JSON=$(curl -s http://localhost:9222/json)
+
+  if echo "$JSON" | grep -q "webSocketDebuggerUrl"; then
+    echo "chrome CDP ready with page"
     break
   fi
-  echo "try"
+
+  echo "waitiing...($i)"
   sleep 2
 done
 
-echo "✅ Chrome ready (CDP available)"
+if ! curl -s http://localhost:9222/json | grep -q "webSocketDebuggerUrl"; then
+  echo " Chrome CDP not ready"
+  exit 1
+fi
 
-sleep 2
+echo "chrome fully ready"
 
 echo "starting proxy...."
-ls -l /app
 
 cd /app
-node proxy.js 
+node proxy.js &
 
 sleep 2
 ps aux | grep node
 
-wait
+echo "browser container is stable"
+
+tail -f /dev/null
